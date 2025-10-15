@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 
 using namespace std;
 using namespace sf;
@@ -40,7 +41,6 @@ int main()
 	messageText.setFont(font);
 	scoreText.setFont(font);
 
-	messageText.setString("Put enter");
 	scoreText.setString("Score = 0");
 
 	messageText.setCharacterSize(75);
@@ -139,11 +139,56 @@ int main()
 
 	bool paused = true;
 
+	Texture texturePlayer;
+	int texturePlayerErr = texturePlayer.loadFromFile("graphics/player.png");
+	Sprite spritePlayer(texturePlayer);
+	spritePlayer.setPosition({580, 720});
+
+	side playerSide = side::LEFT;
+
+	Texture textureRIP;
+	int textureRIPErr = textureRIP.loadFromFile("graphics/rip.png");
+	Sprite spriteRIP(textureRIP);
+	spriteRIP.setPosition({2000, 860});
+
+	Texture textureAxe;
+	int textureAxeErr = textureAxe.loadFromFile("graphics/axe.png");
+	Sprite spriteAxe(textureAxe);
+	spriteAxe.setPosition({2000, 830});
+
+	const float AXE_POSITION_LEFT = 700;
+	const float AXE_POSITION_RIGHT = 1075;
+
+	Texture textureLog;
+	int textureLogErr = textureLog.loadFromFile("graphics/log.png");
+	Sprite spriteLog(textureLog);
+	spriteLog.setPosition({810, 720});
+
+	bool logActive = false;
+	float logSpeedX = 1000;
+	float logSpeedY = -1500;
+
+	bool acceptInput = false;
+
+	SoundBuffer chopBuffer;
+	chopBuffer.loadFromFile("sound/chop.wav");
+	Sound chop(chopBuffer);
+	chop.setVolume(20.f);
+	SoundBuffer deathBuffer;
+	deathBuffer.loadFromFile("sound/death.wav");
+	Sound death(deathBuffer);
+	death.setVolume(5.f);
+
+	SoundBuffer ootBuffer;
+	ootBuffer.loadFromFile("sound/out_of_time.wav");
+	Sound outOfTime(ootBuffer);
+	outOfTime.setVolume(10.f);
 
 	while (window.isOpen())
 	{
 
-		float deltaTime = clock.restart().asSeconds();
+		Time dt = clock.restart();
+		float deltaTime = dt.asSeconds();
 
 		totalTime += deltaTime;
 
@@ -175,6 +220,80 @@ int main()
 
 					score = 0;
 					timeRemaining = 6;
+
+					for (int i = 1; i < NUM_BRANCHES; i++)
+					{
+						branchPositions[i] = side::NONE;
+					}
+
+					spriteRIP.setPosition({675, 2000});
+
+					spritePlayer.setPosition({580, 720});
+
+					spriteAxe.setPosition({700, 830});
+
+					acceptInput = true;
+				}
+
+				if (acceptInput)
+				{
+					if (keyPressed->scancode == Keyboard::Scan::Right)
+					{
+						playerSide = side::RIGHT;
+
+						score++;
+
+						timeRemaining += (2 / score) + .35;
+
+						spriteAxe.setPosition({AXE_POSITION_RIGHT, spriteAxe.getPosition().y});
+						spritePlayer.setPosition({1200, 720});
+
+						updateBranches(score);
+
+						spriteLog.setPosition({810, 720});
+						logSpeedX = -5000;
+						logActive = true;
+
+						acceptInput = false;
+
+						chop.play();
+					}
+
+					if (keyPressed->scancode == Keyboard::Scan::Left)
+					{
+						playerSide = side::LEFT;
+
+						score++;
+
+						timeRemaining += (2 / score) + .35;
+
+						spriteAxe.setPosition({AXE_POSITION_LEFT, spriteAxe.getPosition().y});
+						spritePlayer.setPosition({580, 720});
+
+						updateBranches(score);
+
+						spriteLog.setPosition({810, 720});
+						logSpeedX = 5000;
+						logActive = true;
+
+						acceptInput = false;
+
+						chop.play();
+					}
+				}
+			}
+
+			if (const auto* keyReleased = event->getIf<Event::KeyReleased>())
+			{
+				if (keyReleased->scancode == Keyboard::Scan::Right && !paused)
+				{
+					acceptInput = true;
+					spriteAxe.setPosition({2000, spriteAxe.getPosition().y});
+				}
+				if (keyReleased->scancode == Keyboard::Scan::Left && !paused)
+				{
+					acceptInput = true;
+					spriteAxe.setPosition({2000, spriteAxe.getPosition().y});
 				}
 			}
 		}
@@ -182,7 +301,7 @@ int main()
 		if (!paused)
 		{
 			timeRemaining -= frameTime;
-			// cout << timeRemaining << endl;
+			
 			timeBar.setSize(Vector2f(timeBarWidthPerSecond * timeRemaining, timeBarHeight));
 
 			if (timeRemaining <= 0.0f)
@@ -191,7 +310,7 @@ int main()
 
 				messageText.setString("Time OUT !");
 
-
+				outOfTime.play();
 			}
 
 			if (!beeActive)
@@ -307,6 +426,43 @@ int main()
 					branches[i].setPosition({3000, height});
 				}
 			}
+
+			if (logActive)
+			{
+				spriteLog.setPosition({
+					spriteLog.getPosition().x + (logSpeedX * dt.asSeconds()),
+					spriteLog.getPosition().y + (logSpeedY * dt.asSeconds())
+				});
+
+				if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().x > 2000)
+				{
+					logActive = false;
+					spriteLog.setPosition({810, 720});
+				}
+			}
+
+			if (branchPositions[5] == playerSide)
+			{
+				paused = true;
+				acceptInput = false;
+
+				spriteRIP.setPosition({525, 760});
+
+				spritePlayer.setPosition({2000, 660});
+
+				spriteAxe.setPosition({3000, 760});
+
+				messageText.setString("CRUSHED!");
+
+				FloatRect textRect = messageText.getLocalBounds();
+
+				messageText.setOrigin(Vector2f({textRect.size.x / 2.0f, 
+					textRect.size.y / 2.0f}));
+
+				messageText.setPosition({1920 / 2.0f, 1080 / 2.0f});
+
+				death.play();
+			}
 		}
 
 
@@ -324,6 +480,12 @@ int main()
 		}
 
 		window.draw(spriteTree);
+
+		
+		window.draw(spritePlayer);
+		window.draw(spriteAxe);
+		window.draw(spriteLog);
+		window.draw(spriteRIP);
 
 		window.draw(spriteBee);
 
